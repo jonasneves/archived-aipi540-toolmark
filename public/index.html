@@ -4,17 +4,163 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Toolmark — per-tool injection detection</title>
+    <meta
+      name="description"
+      content="Per-tool operating-point analysis of indirect prompt injection detection on AI agent tool outputs."
+    />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <main>
       <header>
-        <h1>Toolmark</h1>
-        <p class="tagline">per-tool operating-point analysis of indirect prompt injection</p>
+        <div class="eyebrow">AIPI 540 · Spring 2026 · Duke</div>
+        <h1>Where do prompt-injection classifiers <em>break</em>?</h1>
+        <p class="tagline">
+          Production guardrails report ~98% aggregate accuracy. On agent-targeted
+          indirect attacks, recent work measures detection dropping to
+          <strong>7–37%</strong>. Toolmark localizes which tools cause the collapse —
+          and asks whether tool-identity conditioning closes the gap.
+        </p>
+        <p class="links">
+          <a href="https://github.com/jonasneves/aipi540-toolmark" target="_blank" rel="noopener">Repository</a>
+          <span class="sep">·</span>
+          <a href="https://github.com/jonasneves/aipi540-toolmark/blob/main/SCOPE.md" target="_blank" rel="noopener">Scope</a>
+          <span class="sep">·</span>
+          <a href="#leaderboard">Results</a>
+          <span class="sep">·</span>
+          <a href="#method">Method</a>
+        </p>
       </header>
-      <section class="placeholder">
-        <p>Scaffolding. Demo lands Mon Apr 20. See <a href="https://github.com/jonasneves/aipi540-toolmark/blob/main/SCOPE.md">SCOPE.md</a> for the plan.</p>
+
+      <section class="demo" id="demo" aria-labelledby="demo-heading">
+        <h2 id="demo-heading">Try it</h2>
+        <p class="section-note">
+          Paste a tool output and see the classifier's per-token risk estimate.
+          Inference runs in your browser via ONNX Runtime Web + WebGPU — no
+          server, no API key. The model ships with the page (~65 MB).
+        </p>
+
+        <div class="demo-grid">
+          <div class="demo-input">
+            <label class="field-label" for="tool-class">Tool class</label>
+            <div class="tool-pills" role="radiogroup" aria-label="Tool class">
+              <button class="pill" data-tool="email" role="radio" aria-checked="true">email</button>
+              <button class="pill" data-tool="calendar" role="radio" aria-checked="false">calendar</button>
+              <button class="pill" data-tool="note" role="radio" aria-checked="false">note</button>
+              <button class="pill" data-tool="code" role="radio" aria-checked="false">code</button>
+              <button class="pill" data-tool="shopping" role="radio" aria-checked="false">shopping</button>
+              <button class="pill" data-tool="messaging" role="radio" aria-checked="false">messaging</button>
+              <button class="pill" data-tool="healthcare" role="radio" aria-checked="false">healthcare</button>
+              <button class="pill" data-tool="web_fetch" role="radio" aria-checked="false">web_fetch</button>
+            </div>
+
+            <label class="field-label" for="sample">Example</label>
+            <select id="sample" class="select"></select>
+
+            <label class="field-label" for="tool-output">Tool output</label>
+            <textarea
+              id="tool-output"
+              rows="9"
+              placeholder="Paste the text an AI agent would read back from this tool..."
+            ></textarea>
+
+            <div class="demo-buttons">
+              <button id="analyze" class="btn-primary" disabled>Analyze</button>
+              <button id="clear" class="btn-ghost">Clear</button>
+            </div>
+            <p class="model-status" id="model-status">Loading model…</p>
+          </div>
+
+          <aside class="demo-output" aria-live="polite">
+            <div class="risk-panel">
+              <div class="risk-label">Injection risk</div>
+              <div class="risk-score" id="risk-score">—</div>
+              <div class="risk-bar">
+                <div class="risk-bar-fill" id="risk-bar-fill" style="width:0%"></div>
+              </div>
+              <div class="risk-verdict" id="risk-verdict">paste a sample to analyze</div>
+            </div>
+
+            <div class="context-panel">
+              <div class="context-row">
+                <span class="context-label">This tool's LOTCO recall@1%FPR</span>
+                <span class="context-value" id="context-recall">—</span>
+              </div>
+              <div class="context-row">
+                <span class="context-label">Training support (rows)</span>
+                <span class="context-value" id="context-support">—</span>
+              </div>
+              <p class="context-note" id="context-note">
+                Tool classes under-represented in training collapse first when
+                benigns are allowed to contain benign imperatives.
+              </p>
+            </div>
+          </aside>
+        </div>
       </section>
+
+      <section class="leaderboard" id="leaderboard" aria-labelledby="leader-heading">
+        <h2 id="leader-heading">LOTCO leaderboard</h2>
+        <p class="section-note">
+          Leave-One-Tool-Class-Out. For each class, the model is trained on the
+          remaining 7 classes; the threshold that achieves FPR ≤ 1% is
+          calibrated on a held-out validation slice and applied verbatim to the
+          held-out class. Recall at that threshold is reported below.
+        </p>
+        <div class="table-wrap">
+          <table id="scores-table" class="scores-table">
+            <thead>
+              <tr>
+                <th scope="col">Tool class</th>
+                <th scope="col">Support</th>
+                <th scope="col">Naive (keyword)</th>
+                <th scope="col">Classical (XGBoost)</th>
+                <th scope="col">Deep (DistilBERT)</th>
+              </tr>
+            </thead>
+            <tbody id="scores-tbody">
+              <tr><td colspan="5" class="loading-row">Loading results…</td></tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Mean</th>
+                <th id="mean-support"></th>
+                <th id="mean-naive"></th>
+                <th id="mean-classical"></th>
+                <th id="mean-deep"></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      <section class="method" id="method" aria-labelledby="method-heading">
+        <h2 id="method-heading">Method in one paragraph</h2>
+        <p>
+          The dataset is built from InjecAgent's 1,054 attack cases across 17
+          user tools that map to 8 tool classes. For each attack we emit a
+          matched (benign, malicious) pair anchored on the same
+          <code>Tool Response Template</code> shell — only the
+          <code>&lt;Attacker Instruction&gt;</code> slot differs. Benign fillers
+          come from a mixed-register pool of 40 entries: half conversational
+          declaratives, half benign-intent imperatives. The imperative half is
+          what forces the classifier to learn malicious <em>intent</em> rather
+          than imperative <em>shape</em> — otherwise char n-grams hit 100%
+          trivially on every fold. Three models are trained: a keyword
+          heuristic, XGBoost over char n-gram TF-IDF + tool one-hot, and a
+          fine-tuned DistilBERT with
+          <code>[TOOL:&nbsp;&lt;class&gt;]</code> prepend. The primary metric is
+          recall at 1% FPR, calibrated on val and applied to the held-out
+          class.
+        </p>
+      </section>
+
+      <footer>
+        <p>
+          <strong>Jonas Neves</strong> · Duke AIPI 540 · Spring 2026 ·
+          <a href="https://github.com/jonasneves/aipi540-toolmark">source</a>
+        </p>
+      </footer>
     </main>
     <script src="app.js" type="module"></script>
   </body>

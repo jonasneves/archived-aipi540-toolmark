@@ -176,11 +176,17 @@ def _pick_device() -> str:
 
 @dataclass
 class DeepModel:
-    """DistilBERT fine-tune with `[TOOL: <class>]` prepend in the input text."""
+    """DistilBERT fine-tune with `[TOOL: <class>]` prepend in the input text.
+
+    Hyperparameters chosen for LOTCO across 8 folds on a laptop MPS budget.
+    The attack+benign strings are short (most < 192 tokens), and one epoch
+    on ~1,500 training examples converges reliably for a fine-tune. Scaling
+    these up gives marginal numbers and blows the training budget.
+    """
 
     include_tool_feature: bool = True
-    max_length: int = 256
-    epochs: int = 2
+    max_length: int = 192
+    epochs: int = 1
     per_device_batch: int = 16
     name: str = "deep_distilbert"
 
