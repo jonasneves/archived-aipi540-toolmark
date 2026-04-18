@@ -23,7 +23,7 @@ Aggregate benchmarks hide which tools are under-sampled or adversarially fragile
 ├── REQUIREMENTS_CHECKLIST.md
 ├── requirements.txt
 ├── setup.py
-├── app.py                  # local dev server wrapper; real app is web/
+├── app.py                  # local dev server wrapper; real app is docs/
 ├── scripts/
 │   ├── make_dataset.py     # fetch + join InjecAgent / BIPIA / WASP with tool metadata
 │   ├── build_features.py   # TF-IDF + tool one-hot; DistilBERT tokenization
@@ -35,8 +35,9 @@ Aggregate benchmarks hide which tools are under-sampled or adversarially fragile
 ├── models/                 # serialized artifacts (gitignored except metadata)
 ├── notebooks/              # exploration only; not graded
 ├── results/                # scores.json, plots, confusion matrices
-├── docs/                   # report drafts, figures
-├── web/                    # static app: ONNX Runtime Web + WebGPU
+├── report/                 # written report drafts, figures for the writeup
+├── public/                 # static app source: ONNX Runtime Web + WebGPU
+├── docs -> public          # symlink so GH Pages serves main/docs → public/
 └── .gitignore
 ```
 

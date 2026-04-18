@@ -4,10 +4,10 @@ Tracks the published rubric line-by-line. `[x]` = demonstrated in the repo; `[ ]
 
 ## Written Report
 
-- [ ] Problem Statement — `docs/report.md#problem-statement`
-- [ ] Data Sources — `docs/report.md#data-sources`
-- [ ] Related Work — `docs/report.md#related-work`
-- [ ] Evaluation Strategy & Metrics (with explicit rationale) — `docs/report.md#evaluation`
+- [ ] Problem Statement — `report/report.md#problem-statement`
+- [ ] Data Sources — `report/report.md#data-sources`
+- [ ] Related Work — `report/report.md#related-work`
+- [ ] Evaluation Strategy & Metrics (with explicit rationale) — `report/report.md#evaluation`
 - [ ] Modeling Approach
   - [ ] Data Processing Pipeline (with rationale per step)
   - [ ] Hyperparameter Tuning Strategy

@@ -1,8 +1,8 @@
 """Local dev server for the static web app.
 
-The deployed app is fully static (GitHub Pages) and runs inference in the
-browser via ONNX Runtime Web + WebGPU. This script exists so `python app.py`
-serves `web/` on http://localhost:8000 during development.
+The deployed app is fully static (GitHub Pages, served from main/docs) and
+runs inference in the browser via ONNX Runtime Web + WebGPU. This script
+serves `docs/` on http://localhost:8000 during development.
 """
 
 from __future__ import annotations
@@ -13,13 +13,13 @@ import socketserver
 from functools import partial
 from pathlib import Path
 
-WEB_ROOT = Path(__file__).resolve().parent / "web"
+SITE_ROOT = Path(__file__).resolve().parent / "public"
 
 
 def serve(port: int = 8000) -> None:
-    handler = partial(http.server.SimpleHTTPRequestHandler, directory=str(WEB_ROOT))
+    handler = partial(http.server.SimpleHTTPRequestHandler, directory=str(SITE_ROOT))
     with socketserver.TCPServer(("", port), handler) as httpd:
-        print(f"serving {WEB_ROOT} at http://localhost:{port}")
+        print(f"serving {SITE_ROOT} at http://localhost:{port}")
         httpd.serve_forever()
 
 

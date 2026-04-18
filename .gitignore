@@ -46,5 +46,5 @@ results/figures/
 !results/.gitkeep
 
 # ONNX exports — built by export script
-web/models/*.onnx
-web/models/*.bin
+public/models/*.onnx
+public/models/*.bin
