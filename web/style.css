@@ -1,0 +1,25 @@
+:root {
+  --bg: #0a0f1a;
+  --surface: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #e2e8f0;
+  --text-secondary: #64748b;
+  --accent: #E86F5F;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Helvetica Neue', ui-sans-serif, sans-serif;
+  line-height: 1.6;
+  padding: 3rem 1.5rem;
+}
+
+main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+header h1 { font-weight: 600; letter-spacing: -0.03em; }
+header h1::first-letter { color: var(--accent); }
+.tagline { color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem; }
+.placeholder { padding: 1.5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+a { color: var(--accent); }

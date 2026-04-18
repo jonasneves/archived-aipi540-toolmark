@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+env/
+.env
+.envrc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Data — download via scripts/make_dataset.py
+data/raw/
+data/processed/*
+!data/processed/.gitkeep
+data/outputs/*
+!data/outputs/.gitkeep
+
+# Model artifacts — usually too large to commit
+models/*
+!models/.gitkeep
+!models/*.md
+
+# Results — scores.json is committed; predictions/plots are not
+results/predictions/
+results/figures/
+!results/scores.json
+!results/.gitkeep
+
+# ONNX exports — built by export script
+web/models/*.onnx
+web/models/*.bin
