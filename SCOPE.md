@@ -27,14 +27,20 @@ This is a measurement contribution. No capability claim vs. Anthropic Claude Cod
 
 | Source | Role | Notes |
 |---|---|---|
-| **InjecAgent** (ACL 2024) | Primary attack population | 1,054 cases × 17 user tools × 62 attacker tools; tool identity preserved |
-| **BIPIA** (Yi et al.) | Training volume augmentation | ~2K examples across email / web / chat |
-| **WASP** (arXiv 2504.18575) | Distribution-shift test set | VisualWebArena-based, 84 user+injection combos |
-| Benign synthesis | Negative class | Generated benign tool returns from the same tool schemas; documented label-noise hazard |
+| **InjecAgent** (ACL 2024) | Primary population | 1,054 cases × 17 user tools × 8 tool classes; matched (benign, malicious) pairs synthesized per case |
+| Benign synthesis | Negative class | `Tool Response Template` with `<Attacker Instruction>` slot filled from a deterministic 30-phrase pool; label-noise hazard documented |
 
-**Dedup policy**: attack-template deduplication (not string matching). Published transfer numbers are inflated by template overlap; we'll report both de-duped and string-level numbers and discuss the gap.
+**Tool-class taxonomy (8 classes)**: shopping, note, code, email, calendar, healthcare, messaging, web_fetch. See `scripts/make_dataset.py` for the per-tool mapping.
 
-**Skip**: MCP-SafetyBench (to avoid echo with sibling AIPI 590 Challenge 4 project).
+**Built dataset**: 2,108 rows, perfectly balanced (1,054 malicious + 1,054 benign), 1,054 unique templates. Class counts per tool_class range from 124 (healthcare, web_fetch — one tool each) to 496 (messaging — four tools). The under-represented classes become the hardest LOTCO targets.
+
+**Dedup policy**: attack-template deduplication on `(template_id, variant)`. InjecAgent contained no cross-split duplicates (dedup no-op); kept as a guard for future data additions.
+
+**Skipped, with reasons documented in the report**:
+
+- **BIPIA**: schema is `context + question + answer` (task benchmark, not span-labeled injection). Span-level label extraction exceeds the 4-day budget.
+- **WASP**: requires a live web-agent sandbox for trace generation.
+- **MCP-SafetyBench**: avoided to prevent echo with the sibling AIPI 590 Challenge 4 project.
 
 ## Three models
 
@@ -48,16 +54,18 @@ This is a measurement contribution. No capability claim vs. Anthropic Claude Cod
 
 ## Experiment (the one focused experiment)
 
-**Tool-conditional recall@1%FPR on agent-targeted indirect attacks.**
+**Leave-One-Tool-Class-Out (LOTCO) recall@1%FPR on InjecAgent.**
+
+A finer-grained version of *When Benchmarks Lie* (Fomin 2026)'s Leave-One-Dataset-Out: within a single benchmark, we localize *which tool classes* collapse when held out of training vs. which generalize. Directly answers "which tools cause production classifiers to drop from ~98% aggregate to 7–37% on agent-indirect attacks."
 
 **Procedure**:
-1. Train each of the three models on InjecAgent + BIPIA (tool identity preserved)
-2. Evaluate on WASP with **per-tool-class stratification**
-3. For each (model, tool) pair: report recall at 1% FPR, PR-AUC, calibration error
-4. Ablation: train/eval with tool-identity features masked, measure the lift delta
-5. Dedup analysis: rerun with attack-template dedup, report number delta vs. string-level
+1. For each of 8 tool classes, hold it out of training; train on the remaining 7 classes
+2. Train each of the three models (naive, classical, DL) on the 7-class pool
+3. Evaluate on the held-out class: recall at 1% FPR, PR-AUC, expected calibration error
+4. Ablation: rerun the classical model with tool-identity features masked; measure the lift delta
+5. Compare held-out performance to a matched in-distribution split
 
-**Output**: per-tool leaderboard + calibration curves. The artifact the community reuses.
+**Output**: 3 models × 8 tool classes × 3 metrics leaderboard + per-class calibration curves. The artifact the reader takes away.
 
 ## Evaluation metrics + rationale
 
@@ -70,7 +78,7 @@ Writeup must explicitly justify why recall@1%FPR is the right lens for this depl
 
 ## App (the demo)
 
-Single-page static web app at `web/index.html`, served from GitHub Pages.
+Single-page static web app at `public/index.html` (served from GitHub Pages via the `docs → public` symlink).
 
 **Left pane**: tool selector + textarea for tool output (with example payloads per tool).
 **Right pane**: risk score, tool-conditional calibration band (wider when the tool is under-sampled in training), token-level attention highlights on suspicious spans.
@@ -93,9 +101,9 @@ Each with root cause + proposed mitigation.
 
 | Day | Target |
 |---|---|
-| **Fri Apr 17 (tonight)** | Repo scaffold (done). Fetch InjecAgent + BIPIA + WASP. Dataset join with tool metadata preserved. Train/test split with no tool-name leakage + attack-template dedup. Corpus on disk. |
-| **Sat Apr 18** | Naive + classical baselines. DistilBERT fine-tune. Evaluation harness with per-tool stratification. One clean end-to-end run. |
-| **Sun Apr 19** | WASP cross-dataset eval. Per-tool leaderboard v1. Ablation: tool-identity masked. ONNX export + browser inference proven. Start web app shell. |
+| **Fri Apr 17** | Repo scaffold + GH Pages live (done). |
+| **Sat Apr 18** | Dataset built (done). Naive + classical baselines. DistilBERT fine-tune. Eval harness with LOTCO stratification. One clean end-to-end run. |
+| **Sun Apr 19** | LOTCO evaluation over 8 tool classes × 3 models. Per-class leaderboard v1. Tool-identity ablation. ONNX export + browser inference proven. Start web app shell. |
 | **Mon Apr 20** | Web app polish (WebGPU inference, calibration band, token highlights). Deploy to GH Pages. Write report. Error analysis section. |
 | **Tue Apr 21 AM** | Slides (6–7, Bent's house style). Rehearse. Submit by 11:30am. |
 
