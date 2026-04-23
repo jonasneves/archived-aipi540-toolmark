@@ -1,4 +1,4 @@
-# Toolmark: Where Do Prompt-Injection Classifiers Break?
+# Toolmark: When Does Deep Learning Actually Help on Prompt-Injection Detection?
 
 **A per-tool operating-point analysis of indirect prompt-injection detection on AI-agent tool outputs.**
 
@@ -8,7 +8,7 @@ Jonas Neves · Duke AIPI 540 — Deep Learning Applications · Spring 2026
 
 ## Abstract
 
-Production prompt-injection guardrails report ~98% aggregate accuracy. On agent-targeted indirect attacks, recent work (Fomin 2026) measures detection collapsing to **7–37%**. Aggregate benchmarks hide which tools cause the collapse. Toolmark contributes a measurement artifact: Leave-One-Tool-Class-Out (LOTCO) recall at 1% FPR on InjecAgent, with tool-identity preserved and a matched benign/malicious construction, across three models — a keyword heuristic, XGBoost over char n-gram TF-IDF with tool one-hot, and a fine-tuned DistilBERT. Two substantive findings follow. First, the **keyword-heuristic baseline collapses from 68% to 5% recall** when benigns contain natural imperative phrasing — a concrete failure mode of the first-generation "block on attack keywords" defense. Second, once text features exist, **tool-identity conditioning provides essentially zero lift** (0.941 → 0.946 mean): char n-grams saturate the signal without it. We interpret both results as evidence of benchmark-construction artifact rather than deployable security, and sketch what a realistic successor benchmark would require.
+Production prompt-injection guardrails report ~98% aggregate accuracy; Fomin (2026) finds that on agent-targeted indirect attacks, detection collapses to 7–37%. Toolmark contributes a measurement artifact under a cleaner, reproducible construction: Leave-One-Tool-Class-Out (LOTCO) recall at 1% FPR on InjecAgent, with a matched-pair benign/malicious construction, across three models — a keyword heuristic, XGBoost over char n-gram TF-IDF with tool one-hot, and a fine-tuned DistilBERT with tool-class prepend. Three findings. **(1)** The keyword-heuristic baseline collapses from 68% to **5%** recall when benigns contain natural imperative phrasing — a concrete failure mode of first-generation "block on attack keywords" defenses. **(2)** DistilBERT beats XGBoost by **~4 points** mean (0.990 vs. 0.946), but the gap is not uniform: DL wins on natural-language tool outputs (email, code, note, messaging) while classical matches or beats DL on structured-JSON outputs (calendar, shopping). **(3)** Tool-identity conditioning is a **null result** for both models — adding the tool feature changes mean recall by less than 0.5 points and sometimes hurts per-class. Text features saturate the signal; the tool-as-feature hypothesis does not earn its complexity.
 
 ## 1. Problem Statement
 
@@ -79,8 +79,6 @@ Given the 4-day budget and the measurement (rather than capability) framing, we 
 
 ## 6. Results
 
-[TODO insert the leaderboard table from `results/scores.json` + ROC-PR curves]
-
 ### Mean recall at 1% FPR across 8 LOTCO folds
 
 | Model | Mean recall@1%FPR | PR-AUC | ECE |
@@ -88,20 +86,33 @@ Given the 4-day budget and the measurement (rather than capability) framing, we 
 | naive_keyword | 0.049 | 0.661 | 0.183 |
 | classical_xgb (tool one-hot) | 0.941 | 1.000 | 0.012 |
 | classical_xgb (no tool feature) | 0.946 | 1.000 | 0.011 |
-| deep_distilbert (tool prepend) | TBD | TBD | TBD |
-| deep_distilbert (no tool prepend) | TBD | TBD | TBD |
+| **deep_distilbert (tool prepend)** | **0.986** | **1.000** | **0.031** |
+| deep_distilbert (no tool prepend) | 0.990 | 1.000 | 0.032 |
 
 ### Per-tool recall@1%FPR
 
-[TODO table — see `results/scores.json` and the app leaderboard at `./public/index.html`]
+| Tool class | Support | Naive | Classical | XGBoost − | DistilBERT | DistilBERT − |
+|---|---:|---:|---:|---:|---:|---:|
+| calendar | 248 | 0.016 | **1.000** | 1.000 | 0.960 | 0.976 |
+| code | 372 | 0.016 | 0.984 | 0.984 | **1.000** | 1.000 |
+| email | 248 | 0.000 | 0.903 | 0.911 | **1.000** | 1.000 |
+| healthcare | 124 | 0.032 | 0.887 | 0.903 | **0.984** | 0.984 |
+| messaging | 496 | 0.012 | 0.956 | 0.960 | **1.000** | 1.000 |
+| note | 248 | 0.008 | 0.952 | 0.952 | **1.000** | 1.000 |
+| shopping | 248 | 0.000 | **0.960** | 0.952 | 0.944 | 0.992 |
+| web_fetch | 124 | 0.306 | 0.887 | 0.903 | **1.000** | 0.968 |
+
+*Bold = best recall in the row. "−" columns are the ablations without the tool feature.*
 
 ### Reading the results
 
-**Finding 1 — the keyword heuristic collapses.** Recall drops from 0.68 (on purely declarative benigns, run during dataset iteration) to **0.049** on mixed benigns containing imperative phrasing. With FPR held at 1%, the classifier catches almost no true injections. This is a concrete failure mode of first-generation defenses: if a legitimate user can say "please forward me the draft," any classifier keying on "forward" will either false-positive the user or false-negative the attacker.
+**Finding 1 — the keyword heuristic collapses.** Recall drops from 0.68 (measured during dataset iteration on purely declarative benigns) to **0.049** on mixed benigns that contain imperative phrasing. At FPR ≤ 1%, the classifier catches almost no true injections. This is a concrete failure mode of first-generation defenses: if a legitimate user says "please forward me the draft," a classifier keying on "forward" must either false-positive the user or false-negative the attacker. There is no threshold that cleanly separates intent from surface form.
 
-**Finding 2 — tool conditioning gives zero lift.** The classical model with tool one-hot (0.941 mean) and without it (0.946 mean) are indistinguishable. Char n-grams have already separated benigns from malicious on text content alone; there's no signal left for tool identity to add. This is counter to my original hypothesis that under-represented tools would benefit from explicit identity features.
+**Finding 2 — DistilBERT beats XGBoost by ~4 points, but the gap is non-uniform.** DL mean recall is 0.986 vs. 0.941 for XGBoost (+4.5 points). Per-tool, the picture is sharper: DL wins on natural-language tool outputs (email, code, note, messaging, healthcare, web_fetch) and classical wins on structured-JSON outputs (calendar, shopping). The natural-vs-structured split is intuitive: tree-based classifiers over char n-grams exploit exact structural tokens in JSON payloads — `'product_details'`, `'GoogleCalendarEventID'` — that DistilBERT's subword tokenization dilutes into context. Conversely, on free-form email or note text, contextual representations pay off.
 
-**Finding 3 — char n-gram saturation is the benchmark's ceiling.** Classical XGBoost achieves PR-AUC 1.000 on 6 of 8 tool classes; the two "underperformers" (healthcare, web_fetch) still hit 0.887 recall@1%FPR. A 66M-parameter DistilBERT achieves numbers in the same neighborhood. In the context of Fomin 2026's 7–37% finding on real agent-indirect attacks, the gap between our numbers and theirs is the artifact we set out to measure.
+**Finding 3 — tool-identity conditioning is a null result.** Adding a tool-class one-hot to XGBoost: +0.5 points mean (0.946 vs. 0.941). Adding a `[TOOL: <class>]` prepend to DistilBERT: +0.4 points in the **wrong** direction (0.986 vs. 0.990). Across 16 ablation cells, the feature changes recall by > 2 points in only three (shopping-deep: -0.048, web_fetch-deep: +0.032, healthcare-xgb: -0.016), and those deltas average out in aggregate. The original "tool-aware is better than tool-agnostic" hypothesis is not what this data says. Once text features exist, tool identity is redundant.
+
+**Reading across the three findings together.** The benchmark does not stress-test tool identity because it does not need to: the text content of an indirect-injection attack is so structurally different from benign tool output that any classifier with reasonable representation capacity separates them cleanly. Fomin 2026's 7–37% finding on real agent-indirect attacks must therefore be attributable to (a) adversarial attack-style distribution shift that InjecAgent does not capture, or (b) benign distributions in the wild that are much messier than the 40-entry filler pool we could construct in four days.
 
 ## 7. Error Analysis
 
@@ -128,19 +139,20 @@ For each of 8 tool classes, hold that class entirely out of training; train each
 See §6. Briefly: classical and deep models hit 0.88–1.00 per held-out class. Healthcare and web_fetch, the only tool classes with a single user tool each, show the largest degradation — consistent with the hypothesis that under-representation hurts generalization. But the effect size is small (0.88 vs. 1.00), and the aggregate story is that **when text features saturate, holding out a tool class is not the stress test I thought it was**.
 
 ### Interpretation
-The LOTCO experiment reveals an important *null* result: tool-identity conditioning does not meaningfully change per-fold numbers, because char n-grams already separate the classes. The real generalization-stress comes from **distribution shift in attack strategy, not in tool vocabulary**. A successor benchmark should either (a) build benigns from a much larger pool so memorization is impossible, or (b) use LLM-paraphrased attacks as held-out tests, holding attack *style* out rather than tool *class* out.
+The LOTCO experiment reveals two stable signals and one null. **Stable:** a 4.5-point DistilBERT lift over XGBoost mean, and a cleaner split by tool-output format than by tool identity (structured-JSON vs. natural-language). **Null:** tool-identity conditioning does not meaningfully change per-fold numbers, in either direction, for either model. The real generalization stress is distribution shift in *attack strategy*, not in *tool vocabulary*. A successor benchmark should either (a) build benigns from a much larger, real-world-sourced pool so memorization is impossible, or (b) LOOCV on attack *style* (role-play override, encoded payload, indirect-retrieved, multi-turn) rather than tool *class*.
 
 ### Recommendations
-- Do not report aggregate F1 on InjecAgent-as-classification. Report operating-point recall, cross-class deltas, and benchmark-sensitivity.
-- Treat "tool conditioning lifts recall" as an unvalidated hypothesis until tested on a benchmark where base rates are non-trivial.
-- Next measurement to build: adversarial paraphrase transfer from InjecAgent to WASP, holding *attack family* rather than *tool class* constant.
+- Do not report aggregate F1 on InjecAgent-as-classification. Report operating-point recall, per-tool deltas, and benchmark-sensitivity.
+- When choosing between XGBoost and DistilBERT for an injection-detection deployment, the decision should follow tool-output *format*: classical for structured JSON, deep for natural language. The 4-point aggregate gap is an average across two opposite effects, not a uniform win.
+- Treat "tool conditioning lifts recall" as an unvalidated hypothesis. The feature earned no complexity on this benchmark.
 
 ## 9. Conclusions + Future Work
 
-Toolmark is a measurement contribution, not a capability claim. The two substantive takeaways:
+Toolmark is a measurement contribution, not a capability claim. Three substantive takeaways:
 
-1. **Keyword defenses fail hard** when benign tool outputs contain natural imperative phrasing. A 15-token regex drops from 68% to 5% recall when the benigns look like real user requests.
-2. **Tool-identity conditioning does not help** once a modern text classifier exists. The "tool-aware" feature is doing no work; the benchmark is trivially separable on text content.
+1. **Keyword defenses fail hard** when benign tool outputs contain natural imperative phrasing. A 15-token regex drops from 68% to 5% recall when benigns look like real user requests.
+2. **DistilBERT beats XGBoost by ~4 points mean, but the gap is non-uniform**: DL wins on natural-language tool outputs (email, code, note, messaging); classical matches or beats DL on structured-JSON outputs (calendar, shopping). Deployment should pick classifier by tool-output format, not by absolute accuracy.
+3. **Tool-identity conditioning is a null result**. Neither XGBoost's one-hot nor DistilBERT's `[TOOL:]` prepend earned its complexity. Text features saturate the signal; identity features are redundant.
 
 With another semester:
 - Build a 1,000+ unique benign pool by sourcing real tool outputs from public corpora (Enron emails, Amazon reviews, GitHub issues, calendar.ics archives), so the classifier cannot memorize a small benign set.

@@ -14,12 +14,15 @@
     <main>
       <header>
         <div class="eyebrow">AIPI 540 · Spring 2026 · Duke</div>
-        <h1>Where do prompt-injection classifiers <em>break</em>?</h1>
+        <h1>When does <em>deep learning</em> actually help on prompt-injection detection?</h1>
         <p class="tagline">
-          Production guardrails report ~98% aggregate accuracy. On agent-targeted
-          indirect attacks, recent work measures detection dropping to
-          <strong>7–37%</strong>. Toolmark localizes which tools cause the collapse —
-          and asks whether tool-identity conditioning closes the gap.
+          Three models, eight tool classes, one operating point. A keyword
+          heuristic collapses from 68% to <strong>5%</strong> recall when benigns
+          contain natural imperative phrasing. A 66M-parameter DistilBERT beats
+          XGBoost by <strong>~4 points</strong> — but only on natural-language
+          tools (email, code, messaging). On structured-JSON tools (calendar,
+          shopping), classical matches deep. Tool-identity conditioning is a
+          null result across both models.
         </p>
         <p class="links">
           <a href="https://github.com/jonasneves/aipi540-toolmark" target="_blank" rel="noopener">Repository</a>
