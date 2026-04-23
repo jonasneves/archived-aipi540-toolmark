@@ -104,32 +104,72 @@ def train_full() -> None:
 
 
 def export_onnx() -> None:
-    """Use optimum-cli to export the saved PyTorch model to ONNX."""
+    """Export to ONNX and INT8-quantize into the transformers.js layout.
+
+    Writes public/models/toolmark-distilbert/:
+        config.json, tokenizer.json, tokenizer_config.json, special_tokens_map.json, vocab.txt
+        onnx/model_quantized.onnx   (~65 MB, shipped to the browser)
+
+    We do NOT retain the fp32 model.onnx — 256 MB exceeds GitHub's 100 MB
+    per-file limit, and we only need the quantized version in the browser.
+    """
     import subprocess
 
     if ONNX_OUT.exists():
         shutil.rmtree(ONNX_OUT)
     ONNX_OUT.mkdir(parents=True)
+
+    # 1. Export fp32 ONNX into a staging directory
+    staging = ONNX_OUT / ".staging"
+    staging.mkdir()
     cmd = [
-        "optimum-cli",
-        "export",
-        "onnx",
-        "--model",
-        str(PT_OUT),
-        "--task",
-        "text-classification",
-        str(ONNX_OUT),
+        "optimum-cli", "export", "onnx",
+        "--model", str(PT_OUT),
+        "--task", "text-classification",
+        str(staging),
     ]
     log.info("running: %s", " ".join(cmd))
     subprocess.run(cmd, check=True)
-    log.info("exported ONNX to %s", ONNX_OUT)
+
+    # 2. Move tokenizer + config files out of staging
+    for f in ("config.json", "tokenizer.json", "tokenizer_config.json", "special_tokens_map.json", "vocab.txt"):
+        src = staging / f
+        if src.exists():
+            shutil.move(str(src), str(ONNX_OUT / f))
+
+    # 3. Quantize the fp32 ONNX graph to INT8 dynamic
+    from onnxruntime.quantization import QuantType, quantize_dynamic
+
+    fp32 = staging / "model.onnx"
+    onnx_dir = ONNX_OUT / "onnx"
+    onnx_dir.mkdir()
+    quantized = onnx_dir / "model_quantized.onnx"
+    log.info("quantizing %s -> %s (INT8 dynamic)", fp32, quantized)
+    quantize_dynamic(str(fp32), str(quantized), weight_type=QuantType.QUInt8)
+
+    # 4. Drop the fp32 model; the web app only loads the quantized one
+    shutil.rmtree(staging)
+
+    size_mb = quantized.stat().st_size / (1024 * 1024)
+    log.info("exported + quantized ONNX to %s (%.1f MB)", quantized, size_mb)
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--export-only",
+        action="store_true",
+        help="skip training and quantize the existing models/toolmark_distilbert",
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
-    print("[toolmark] training final DistilBERT on full corpus", flush=True)
-    train_full()
-    print("[toolmark] exporting to ONNX", flush=True)
+    if not args.export_only:
+        print("[toolmark] training final DistilBERT on full corpus", flush=True)
+        train_full()
+    print("[toolmark] exporting + quantizing to ONNX", flush=True)
     export_onnx()
     print("[toolmark] done — model ready at public/models/toolmark-distilbert/", flush=True)
 

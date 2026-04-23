@@ -1,12 +1,24 @@
 // Toolmark frontend.
 //
-// Until the DistilBERT ONNX export lands (task #4), the Analyze button runs
-// the Python `NaiveModel`'s keyword heuristic reimplemented in JavaScript.
-// Same keyword list, same blended-score shape — so the page is honestly
-// functional with a weak-but-real classifier rather than a fake spinner.
+// Two classifiers ship with the page:
+//   - the NaiveModel keyword heuristic, reimplemented in JS, available from
+//     first paint so the demo is never in a "waiting for model" dead state.
+//   - the fine-tuned DistilBERT, loaded lazily via transformers.js and ONNX
+//     Runtime Web (WebGPU when available, WASM fallback). Once loaded, the
+//     UI upgrades: model-status goes green and the Analyze button routes
+//     through the deep model.
 //
-// When the ONNX model lands under public/models/, this file swaps the
-// analyze() implementation and marks model-status as "deep (WebGPU)".
+// The PyTorch DistilBERT was fine-tuned on the full 2,108-row Toolmark
+// corpus (see scripts/export_model.py), INT8-quantized, and lives under
+// public/models/toolmark-distilbert/onnx/model_quantized.onnx (~64 MB).
+//
+// transformers.js reference:
+//   https://huggingface.co/docs/transformers.js
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3";
+
+env.allowRemoteModels = false;
+env.localModelPath = "./models/";
+env.backends.onnx.wasm.numThreads = 1;
 
 const TOOL_CLASSES = [
   "calendar",
@@ -142,6 +154,8 @@ const modelStatusEl = document.getElementById("model-status");
 
 let selectedTool = "email";
 let scores = null;
+let deepPipeline = null;
+let deepReady = false;
 
 function selectTool(tool) {
   selectedTool = tool;
@@ -177,11 +191,28 @@ clearBtn.addEventListener("click", () => {
 
 analyzeBtn.addEventListener("click", () => runAnalysis());
 
-function runAnalysis() {
+async function runAnalysis() {
   const text = textarea.value.trim();
   if (!text) return;
-  const score = keywordHeuristicScore(text);
-  renderRisk(score);
+  analyzeBtn.disabled = true;
+  try {
+    const [score, model] = deepReady
+      ? [await distilbertScore(text), "distilbert"]
+      : [keywordHeuristicScore(text), "keyword"];
+    renderRisk(score, model);
+  } finally {
+    analyzeBtn.disabled = false;
+  }
+}
+
+async function distilbertScore(text) {
+  // Prepend the selected tool class so the input matches training layout
+  const input = `[TOOL: ${selectedTool}] ${text}`;
+  const out = await deepPipeline(input, { topk: 2 });
+  // transformers.js returns [{label: 'LABEL_0' | 'LABEL_1', score}, ...] —
+  // pull the "label 1" (malicious) probability.
+  const malicious = out.find((r) => r.label === "LABEL_1" || r.label === "1");
+  return malicious ? malicious.score : 0;
 }
 
 function keywordHeuristicScore(text) {
@@ -201,19 +232,20 @@ function keywordHeuristicScore(text) {
   return Math.min(1.0, majority + (matches / words) * 4.0);
 }
 
-function renderRisk(score) {
+function renderRisk(score, model = "keyword") {
   riskScoreEl.textContent = score.toFixed(2);
   riskBarFill.style.width = `${Math.round(score * 100)}%`;
   riskBarFill.classList.remove("low", "med", "high");
+  const tail = model === "distilbert" ? " (DistilBERT)" : " (keyword heuristic)";
   if (score < 0.4) {
     riskBarFill.classList.add("low");
-    riskVerdictEl.textContent = "Likely benign — no strong injection signal.";
+    riskVerdictEl.textContent = `Likely benign — no strong injection signal.${tail}`;
   } else if (score < 0.7) {
     riskBarFill.classList.add("med");
-    riskVerdictEl.textContent = "Ambiguous — review before the agent consumes it.";
+    riskVerdictEl.textContent = `Ambiguous — review before the agent consumes it.${tail}`;
   } else {
     riskBarFill.classList.add("high");
-    riskVerdictEl.textContent = "Likely injection — block or sandbox before the agent reads.";
+    riskVerdictEl.textContent = `Likely injection — block or sandbox before the agent reads.${tail}`;
   }
 }
 
@@ -292,8 +324,27 @@ function updateContextForTool() {
   contextSupportEl.textContent = support || "—";
 }
 
+async function loadDeepModel() {
+  const device = "webgpu" in navigator ? "webgpu" : "wasm";
+  modelStatusEl.textContent = `Loading DistilBERT (~64 MB)… device=${device}`;
+  try {
+    deepPipeline = await pipeline(
+      "text-classification",
+      "toolmark-distilbert",
+      { dtype: "q8", device }
+    );
+    deepReady = true;
+    modelStatusEl.textContent = `Model: DistilBERT (INT8 ONNX, ${device})`;
+    modelStatusEl.classList.add("ready");
+  } catch (e) {
+    console.error("failed to load DistilBERT, staying on keyword heuristic", e);
+    modelStatusEl.textContent = "Model: keyword heuristic (DistilBERT load failed)";
+    modelStatusEl.classList.add("error");
+  }
+}
+
 selectTool("email");
 analyzeBtn.disabled = false;
-modelStatusEl.textContent = "Model: keyword heuristic (DistilBERT WebGPU export in progress)";
-modelStatusEl.classList.add("ready");
+modelStatusEl.textContent = "Model: keyword heuristic — loading DistilBERT…";
 loadScores();
+loadDeepModel();
